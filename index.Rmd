@@ -1,0 +1,452 @@
+---
+title: "CIS Code Sheet"
+author: "Arnab"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+    number_sections: TRUE
+    code_folding: "hide"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r dependencies, message=FALSE, warning=FALSE}
+library("foreign")
+library("dplyr")
+library("tidyr")
+library("knitr")
+library("DT")
+```
+
+# Preprocessing Data
+
+We will look at the data year-wise before constructing the panel.
+
+## 1992
+
+### NFHS 1 Household Member Recode.
+
+We have selected the variables
+
+1.  state
+
+2.  male
+
+3.  age
+
+4.  years of education
+
+5.  caste (not used)
+
+religion (not available)
+
+```{r}
+nfhs1992hr <-
+  read.dta("raw data/NFHS/NFHS 1992 HM Recode/IAPR23FL.DTA") |>
+  select(
+    sex = hv104,
+    age = hv105,
+    edu = hv108,
+    state = hv024,
+    caste = shcaste,
+  ) |> 
+  mutate(
+    male = factor(
+      sex, 
+      levels = c(1, 2), 
+      labels = c(1, 0)
+      ),
+    caste = factor(
+      caste, 
+      levels = c("scheduled caste", "scheduled tribe", "other"),
+      labels = c("SC", "ST", "Oth")
+    ),
+    edu = case_match(
+      edu,
+      97 ~ NA,
+      99 ~ NA,
+      98 ~ NA,
+      .default = edu),
+    age = case_match(
+      age,
+      98 ~ NA,
+      .default = age),
+    state = factor(
+      case_match(
+      state,
+      "arunachalpradesh" ~ "arunchal pradesh",
+      .default = state
+    )
+    ))
+
+datatable(sample_n(nfhs1992hr, size = 100), rownames = F)
+```
+
+TODO: Data too big to be shown. Will show a random sample later.
+
+### NFHS 1 Individual (Women) Recode.
+
+Have not done this yet. Need to look at possible women autonomy factors.
+
+### Aggregating to State Level
+
+For now, taking the following variables:
+
+1.  mean years of female education.
+2.  mean years of male education.
+3.  sex ratio. (number of women per 1000 men)
+4.  mean female age.
+5.  mean male age.
+6.  state
+
+```{r message=FALSE, warning=FALSE}
+statelevel1992 <- 
+  nfhs1992hr |> 
+    select(
+      state,
+      edu,
+      male,
+      age
+    ) |> tidyr::drop_na() |> 
+    group_by(state, male) |> 
+    summarise(
+      edu = mean(edu),
+      age = mean(age),
+      count = n()
+    ) |> pivot_wider(
+      names_from = male,
+      values_from = c(edu, age, count)
+    ) |> 
+    mutate(
+      state,
+      medu = edu_1,
+      fedu = edu_0,
+      mage = age_1,
+      fage = age_0,
+      sratio = 1000 * count_0/count_1,
+      .keep = "none",
+    )
+
+rm(nfhs1992hr)
+```
+
+Adding in the crime data
+
+Note that we do not use Jammu as NFHS collected data for Jammu while NCRB data is for Jammu and Kashmir.
+
+Delhi vs New Delhi issue.
+
+1. Population is in lakhs.
+2. Incidence is number of crime against women per 1 lakh pop.
+
+```{r}
+crime1992 <- read.csv("raw data/NCRB/crime1992.csv")
+statelevel1992 <- inner_join(statelevel1992, crime1992, by = 'state')
+rm(crime1992)
+
+datatable(statelevel1992, rownames = F)
+```
+
+## 1998
+
+### NFHS 2 Household Member Recode.
+
+We have selected the variables
+
+1.  state
+
+2.  male
+
+3.  age
+
+4.  years of education
+
+5.  caste (not used)
+
+6.  religion (not used)
+
+```{r}
+nfhs1998hr <- 
+  read.dta("raw data/NFHS/NFHS 1998 HM Recode/IAPR42FL.DTA") |> 
+  select(
+    state = hv024,
+    male = hv104,
+    age = hv105,
+    edu = hv108,
+    caste = sh41,
+    rel = sh39
+  ) |> 
+  mutate(
+    male = factor(
+      male, 
+      levels = c("male", "female"),
+      labels = c(1, 0)
+    ),
+    caste = factor(
+      caste,
+      levels = c(
+        "scheduled caste", 
+        "scheduled tribe", 
+        "obc", 
+        "other"
+      ),
+      labels = c("SC", "ST", "OBC", "Oth")
+    ),
+    edu = case_match(
+      edu,
+      97 ~ NA,
+      99 ~ NA,
+      98 ~ NA,
+      .default = edu),
+    age = case_match(
+      age,
+      98 ~ NA,
+      .default = age),
+    rel = factor(rel),
+    state = factor(
+      case_match(
+      state,
+      "arunachalpradesh" ~ "arunchal pradesh",
+      .default = state
+    )
+    )
+  )
+
+datatable(sample_n(nfhs1998hr, size = 100), rownames = F)
+```
+<table style="text-align:center"><tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Statistic</td><td>N</td><td>Mean</td><td>St. Dev.</td><td>Min</td><td>Max</td></tr>
+<tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">age</td><td>517,313</td><td>25.472</td><td>19.161</td><td>0</td><td>95</td></tr>
+<tr><td style="text-align:left">edu</td><td>516,098</td><td>4.099</td><td>4.644</td><td>0</td><td>24</td></tr>
+<tr><td colspan="6" style="border-bottom: 1px solid black"></td></tr></table>
+
+### NFHS 2 Individual (Women) Recode.
+
+### Aggregating to State Level
+
+```{r message=FALSE, warning=FALSE}
+statelevel1998 <- 
+  nfhs1998hr |> 
+    select(
+      state,
+      edu,
+      male,
+      age
+    ) |> tidyr::drop_na() |> 
+    group_by(state, male) |> 
+    summarise(
+      edu = mean(edu),
+      age = mean(age),
+      count = n()
+    ) |> pivot_wider(
+      names_from = male,
+      values_from = c(edu, age, count)
+    ) |> 
+    mutate(
+      state,
+      medu = edu_1,
+      fedu = edu_0,
+      mage = age_1,
+      fage = age_0,
+      sratio = 1000 * count_0/count_1,
+      .keep = "none",
+    )
+
+rm(nfhs1998hr)
+```
+Adding in the crime data
+
+Note that we do not use Jammu as NFHS collected data for Jammu while NCRB data is for Jammu and Kashmir.
+
+1. Population is in lakhs.
+2. Incidence is number of crime against women per 1 lakh pop.
+
+Adding in the crime data
+
+```{r}
+crime1998 <- read.csv("raw data/NCRB/crime1998.csv") 
+statelevel1998 <- inner_join(statelevel1998, crime1998, by = 'state')
+rm(crime1998)
+
+datatable(statelevel1998, rownames = F)
+```
+
+## 2005
+
+### NFHS 3 Household Member Recode.
+```{r message=FALSE, warning=FALSE}
+nfhs2005hr <-
+  read.dta("raw data/NFHS/NFHS 2005 HM Recode/IAPR52FL.DTA") |>
+  select(
+    state = hv024,
+    male = hv104,
+    age = hv105,
+    edu = hv108,
+    caste = sh46,
+    rel = sh44
+  ) |> 
+  mutate(
+    male = factor(
+      male, 
+      levels = c("male", "female"), 
+      labels = c(1, 0)
+    ),
+    caste = factor(
+      caste, 
+      levels = c(
+        "scheduled caste", 
+        "scheduled tribe", 
+        "other backward class", 
+        "none of above"
+        ),
+      labels = c("SC", "ST", "OBC", "Oth")
+    ),
+    edu = case_match(
+      edu,
+      97 ~ NA,
+      99 ~ NA,
+      98 ~ NA,
+      .default = edu),
+    age = case_match(
+      age, 
+      98 ~ NA,
+      .default = age
+    ),
+    rel = factor(rel),
+    state = factor(substring(state, 6))
+  )
+
+datatable(sample_n(nfhs2005hr, size = 100), rownames = F)
+```
+
+
+
+### NFHS 3 Individual (Women) Recode.
+
+### Aggregating to State Level
+
+```{r message=FALSE, warning=FALSE}
+statelevel2005 <- 
+  nfhs2005hr |> 
+    select(
+      state,
+      edu,
+      male,
+      age
+    ) |> tidyr::drop_na() |> 
+    group_by(state, male) |> 
+    summarise(
+      edu = mean(edu),
+      age = mean(age),
+      count = n()
+    ) |> pivot_wider(
+      names_from = male,
+      values_from = c(edu, age, count)
+    ) |> 
+    mutate(
+      state,
+      medu = edu_1,
+      fedu = edu_0,
+      mage = age_1,
+      fage = age_0,
+      sratio = 1000 * count_0/count_1,
+      .keep = "none",
+    )
+
+rm(nfhs2005hr)
+```
+
+Adding in the crime data
+
+Note that we do not use Jammu as NFHS collected data for Jammu while NCRB data is for Jammu and Kashmir.
+
+from here, Delhi is delhi.
+
+1. Population is in lakhs.
+2. Incidence is number of crime against women per 1 lakh pop.
+
+```{r}
+crime2005 <- read.csv("raw data/NCRB/crime2005.csv") 
+statelevel2005 <- inner_join(statelevel2005, crime2005, by = 'state')
+rm(crime2005)
+datatable(statelevel2005, rownames = F)
+```
+
+## 2015
+
+### NFHS 4 Household Member Recode.
+
+### NFHS 4 Individual (Women) Recode.
+
+### Aggregating to State Level
+
+## 2021
+
+### NFHS 5 Household Member Recode.
+
+### NFHS 5 Individual (Women) Recode.
+
+### Aggregating to State Level
+
+## Constructing Panel
+
+# Regression analysis
+
+
+## Notes on Regression
+
+FE
+FEGLS
+FD
+Robust standard errors.
+
+Non negative response
+- log tranformation.
+- Poisson regression for modelling the number of crime.
+- Gamma regression for modelling incidence.
+
+## Pooled OLS
+
+### Level - Level Model
+
+### Level - Log Model
+
+### Log - Level Model
+
+### Log - Log Model
+
+## First Difference
+
+### Level - Level Model
+
+### Level - Log Model
+
+### Log - Level Model
+
+### Log - Log Model
+
+## Fixed Effects
+
+### Level - Level Model
+
+### Level - Log Model
+
+### Log - Level Model
+
+### Log - Log Model
+
+## Correlated Random Effects
+
+For the time coefficient.
+
+### Level - Level Model
+
+### Level - Log Model
+
+### Log - Level Model
+
+### Log - Log Model
